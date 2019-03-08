@@ -1,0 +1,286 @@
+---
+title: "MATH1318 Semester 1, 2018"
+author: "s3650497- Mohammad,s3689517-Malgorzata Sikora,s3638787 - Ravi Pandey"
+subtitle: Time Series - Final Project(Competitve)
+output:
+  pdf_document: default
+  html_notebook: default
+  html_document: default
+---
+
+
+```{r include=FALSE}
+library(TSA)
+library(fUnitRoots)
+library(lmtest)
+library(readr)
+library(forecast)
+library(FitAR)
+library(forecast)
+library(CombMSC)
+library(lmtest)
+library(fGarch)
+library(rugarch)
+library(truncnorm)
+
+```
+
+
+#Importing Data
+```{r}
+
+Bitcoin <- read.csv("C:/Users/Wel/Downloads/R/Bitcoin_Historical_Price.csv")
+head(Bitcoin)
+
+```
+#Converting to Time series Object
+```{r}
+Bitcoin.ts<- ts(Bitcoin,start=c(2013,4,27),frequency=365.25)
+class(Bitcoin.ts)
+head(Bitcoin.ts)
+plot(Bitcoin.ts,ylab='Price in (USD)',xlab='Year', main = "Time series plot for Bitcoin Price")
+
+```
+
+
+#Random Walk(Linear Regression Model) 
+```{r}
+
+model1 = lm(Bitcoin.ts~time(Bitcoin.ts)) 
+summary(model1)
+```
+
+#Added the fitted least squares line from model1
+```{r}
+plot(Bitcoin.ts, ylab='Price in (USD)', main = "Time series plot for simulated linear series")
+abline(model1) 
+
+```
+
+#Quadratic Model 
+```{r}
+t = time(Bitcoin.ts)
+t2 = t^2
+model1.1 = lm(Bitcoin.ts~t+t2) # label the model as model1
+summary(model1.1)
+
+plot(ts(fitted(model1.1)), ylim = c(min(c(fitted(model1.1),
+as.vector(Bitcoin.ts))), max(c(fitted(model1.1),as.vector(Bitcoin.ts)))),ylab='Price in (USD)' ,
+main = "Fitted quadratic curve to linear data")
+lines(as.vector(Bitcoin.ts))
+
+
+
+
+```
+
+#Cyclical or Seasonal Trends
+```{r}
+
+Bitcoin.ts1=(ts(Bitcoin.ts, start = 2013,end = 2018, frequency = 12))
+month.=season(Bitcoin.ts1) 
+model2=lm(Bitcoin.ts1~month.-1)
+summary(model2)
+
+model3=lm(Bitcoin.ts1~month.) 
+summary(model3)
+```
+
+#Cosine Models(Harmonic Models)
+```{r}
+
+har.=harmonic(Bitcoin.ts,1) # calculate cos(2*pi*t) and sin(2*pi*t)
+model4=lm(Bitcoin.ts~har.)
+summary(model4)
+
+
+##Plotting Harmonic models
+
+plot(ts(fitted(model4),freq=365,start=c(2013,1)),ylab='Price in (USD)',type='l',
+ylim=range(c(fitted(model4),Bitcoin.ts)),main="Fitted model to average monthly Bitcoin Price series")
+points(Bitcoin.ts)
+
+
+```
+
+#Stationarity Through Differencing(White noise is generated from the standard normal distribution)
+
+```{r}
+
+plot(Bitcoin.ts,ylab=expression(Y[t]),type='o')
+
+```
+
+#Time series plot of the differences of logarithms of that series
+```{r}
+par(mfrow=c(2,1))
+par(cex=0.7)
+plot(Bitcoin.ts, ylab='Price in (USD)',type='l')
+first.diff = diff(log(Bitcoin.ts))*100
+plot(first.diff,ylab='Change in Log(Price)',type='l')
+abline(h=0)
+
+```
+
+#Natural log transformation
+```{r}
+plot(log(Bitcoin.ts),ylab='Log(Bitcoin)', 
+     main = "Time series plot of logarithms of Bitcoin values.")
+
+```
+
+#Differences of the logarithms of the Bitcoin values
+```{r}
+
+plot(diff(log(Bitcoin.ts)), ylab='Difference of Log(Bitcoin)', 
+     main = "Difference of logarithms for Bitcoin series.")
+
+```
+#ADF
+```{r}
+adf.test(first.diff)
+```
+#ARMA
+Significant Lags can be seen in ACF with first significant lag in PACF. From Eacf, we got ARMA(1,1), ARMA (1,2)
+```{r fig.width=12}
+#Arma (1,1) (1,2)
+par(mfrow=c(1,2))
+acf(as.vector(log(Bitcoin.ts)),xaxp=c(0,24,12), main="ACF Bitcoin(USD) Price Time Series.")
+pacf(as.vector(log(Bitcoin.ts)),xaxp=c(0,24,12), main=" PACF Bitcoin(USD) Price Time Series.")
+
+eacf(first.diff)
+```
+
+#ACF and PACF with absolute values and returns
+There are significant lags in both ACF and PACF with deteoriating trend . From Eacf we get ARMA(2,2)& ARMA(2,3)
+```{r fig.width=12}
+#ARMA(2,2)(2,3)
+par(mfrow=c(1,2))
+acf(abs(first.diff),main="ACF of the \n
+    Absolute Daily Bitcoin Price")
+pacf(abs(first.diff),main="PACF of the Absolute Daily Bitcoin Price")
+
+
+eacf(abs(first.diff))
+```
+
+
+#ACF and PACF for the squared absolute values 
+It was squared and we found out that there were no obvious models due to volitality clustering which is more visible for the squared values
+there is fuziness due to high variablilty 
+```{r fig.width=12}
+
+par(mfrow=c(1,2))
+acf(first.diff^2,main="ACF(Squared Daily Bitcoin Price)")
+pacf(first.diff^2,main="PACF(Squared Daily Bitcoin Price)")
+eacf(first.diff^2)
+```
+
+#McLeod Li Test
+```{r}
+McLeod.Li.test(y=first.diff,main="McLeod-Li Test Statistics for Daily Bitcoin Price")
+```
+#Shapiro Test
+```{r}
+qqnorm(first.diff,main="Q-Q Normal Plot of Daily Bitcoin Price")
+qqline(first.diff)
+
+shapiro.test(first.diff)
+```
+
+#Estimation of Parameters
+```{r}
+
+model1 = garch(first.diff,order=c(2,2),trace = FALSE)
+summary(model1) # All the coefficients are significant at 5% level of significance.
+model1.1 = garchFit(formula = ~garch(2,2), data =first.diff )
+summary(model1.1)
+
+
+
+
+```
+
+```{r}
+
+model2 = garch(first.diff,order=c(2,3),trace = FALSE)
+summary(model2 )# All the coefficients but aplha_2 are significant at 5% level of significance.
+model2.1 = garchFit(formula = ~garch(3,2), data =first.diff, trace = FALSE )
+summary(model2.1)
+
+```
+
+```{r, include=FALSE}
+residual.analysis <- function(model, std = TRUE,start = 2, class = c("ARIMA","GARCH","ARMA-GARCH")[1]){
+  # If you have an output from arima() function use class = "ARIMA"
+  # If you have an output from garch() function use class = "GARCH"
+  # If you have an output from ugarchfit() function use class = "ARMA-GARCH"
+  library(TSA)
+  library(FitAR)
+  if (class == "ARIMA"){
+    if (std == TRUE){
+      res.model = rstandard(model)
+    }else{
+      res.model = residuals(model)
+    }
+  }else if (class == "GARCH"){
+    res.model = model$residuals[start:model$n.used]
+  }else if (class == "ARMA-GARCH"){
+      res.model = model@fit$residuals
+  }else {
+    stop("The argument 'class' must be either 'ARIMA' or 'GARCH' ")
+  }
+  par(mfrow=c(3,3))
+  plot(res.model,type='o',ylab='Standardised residuals', main="Time series plot of standardised residuals")
+  abline(h=0)
+  hist(res.model,main="Histogram of standardised residuals")
+  acf(res.model,main="ACF of standardised residuals")
+  pacf(res.model,main="PACF of standardised residuals")
+  qqnorm(res.model,main="QQ plot of standardised residuals")
+  qqline(res.model, col = 2)
+  print(shapiro.test(res.model))
+  k=0
+  LBQPlot(res.model, lag.max = 60, StartLag = k + 1, k = 0, SquaredQ = FALSE)
+}
+
+```
+
+#Residual Analysis
+The residual analysis for both the models are almost same, by lookin at the time series of the residual analysis we can say that the series is stochastic and without a trend, the histogram is almost normally distributed and the PACF and ACF plots have significant lags and the qq plot for standardised residuals is normally distributed 
+```{r fig.height=11, fig.width=12}
+residual.analysis(model1,class="GARCH",start=3)
+
+```
+
+```{r fig.height=12, fig.width=12}
+residual.analysis(model2,class="GARCH",start=4)
+
+```
+
+#Shapiro Test
+```{r}
+ shapiro.test(first.diff)
+```
+
+
+
+
+
+
+#Forecast
+```{r}
+
+forecast <- fGarch::predict(model2.1,n.ahead=10,trace=FALSE,plot=TRUE)
+
+```
+
+
+
+
+
+
+
+
+
+
+
